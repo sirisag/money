@@ -40,10 +40,21 @@ class IsarService {
     return await users.filter().primaryIdEqualTo(primaryId).findFirst();
   }
 
+  /// Finds an AppUser by their secondaryId.
+  /// Returns null if no user is found.
+  Future<AppUser?> getAppUserBySecondaryId(String secondaryId) async {
+    return await users.filter().secondaryIdEqualTo(secondaryId).findFirst();
+  }
+
   /// Finds an AppUser by their Isar ID.
   /// Returns null if no user is found.
   Future<AppUser?> getAppUserById(Id id) async {
     return await users.get(id);
+  }
+
+  /// Gets all AppUsers.
+  Future<List<AppUser>> getAllAppUsers() async {
+    return await users.where().findAll();
   }
 
   // --- MonkProfile Methods ---
@@ -127,6 +138,17 @@ class IsarService {
         .findAll();
   }
 
+  /// Gets all TransactionRecords for a specific driver.
+  Future<List<TransactionRecord>> getTransactionsForDriver(
+    String driverPrimaryId,
+  ) async {
+    return await transactions
+        .filter()
+        .driverPrimaryIdEqualTo(driverPrimaryId)
+        .sortByDateTimeDesc()
+        .findAll();
+  }
+
   /// Gets all TransactionRecords.
   Future<List<TransactionRecord>> getAllTransactionRecords() async {
     return await transactions.where().sortByDateTimeDesc().findAll();
@@ -146,6 +168,17 @@ class IsarService {
   /// Gets all CentralFundTransactions.
   Future<List<CentralFundTransaction>> getAllCentralFundTransactions() async {
     return await centralFundTransactions.where().sortByDateTimeDesc().findAll();
+  }
+
+  /// Gets all CentralFundTransactions related to a specific driver.
+  Future<List<CentralFundTransaction>> getCentralFundTransactionsForDriver(
+    String driverPrimaryId,
+  ) async {
+    return await centralFundTransactions
+        .filter()
+        .relatedToDriverIdEqualTo(driverPrimaryId)
+        .sortByDateTimeDesc()
+        .findAll();
   }
 
   // --- DriverExpenseRecord Methods ---

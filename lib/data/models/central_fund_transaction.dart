@@ -1,3 +1,5 @@
+// In central_fund_transaction.dart
+
 import 'package:isar/isar.dart';
 
 part 'central_fund_transaction.g.dart';
@@ -9,11 +11,33 @@ enum CentralFundTransactionType {
   issueDriverAdvance, // Money given to a driver as advance
   receiveDriverAdvanceReturn, // Money returned by a driver from advance
   reimburseDriverForExpense, // Money paid back to a driver for expenses they covered
+  unknown; // Added for default/error cases
+
+  String get displayName {
+    switch (this) {
+      case CentralFundTransactionType.donation:
+        return 'รับบริจาค/รายรับ';
+      case CentralFundTransactionType.templeExpense:
+        return 'ค่าใช้จ่ายวัด';
+      case CentralFundTransactionType.issueDriverAdvance:
+        return 'เบิกเงินสำรองให้คนขับรถ';
+      case CentralFundTransactionType.receiveDriverAdvanceReturn:
+        return 'รับคืนเงินสำรองจากคนขับรถ';
+      case CentralFundTransactionType.reimburseDriverForExpense:
+        return 'จ่ายคืนค่าใช้จ่ายให้คนขับรถ';
+      case CentralFundTransactionType.unknown:
+        return 'ไม่ทราบประเภท';
+      default:
+        return '';
+    }
+  }
 }
 
 // This annotation marks the class as an Isar collection.
 @collection
 class CentralFundTransaction {
+  CentralFundTransaction(); // Add unnamed constructor
+
   // Isar automatically manages this ID as the primary key.
   Id id = Isar.autoIncrement;
 
@@ -27,8 +51,8 @@ class CentralFundTransaction {
 
   String? description; // Details or notes about the transaction
 
-  String?
-  relatedDriverId; // Primary ID of the driver involved (if type is related to driver advance/reimbursement)
+  @Index() // Added Index here
+  String? relatedDriverId; // Primary ID of the driver involved (if type is related to driver advance/reimbursement)
   String?
   relatedMonkId; // Primary ID of the monk involved (if applicable, e.g., expense for monk's medical bill)
 
@@ -38,4 +62,21 @@ class CentralFundTransaction {
   // Optional: Store the balance after this transaction for easier history viewing.
   // This can be negative.
   int? balanceAfter;
+}
+
+// --- JSON Serialization ---
+extension CentralFundTransactionToJson on CentralFundTransaction {
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id == Isar.autoIncrement ? null : id, // Handle auto-increment ID
+      'type': type.name, // Serialize enum as string name
+      'amount': amount,
+      'dateTime': dateTime.toIso8601String(), // Serialize DateTime
+      'description': description,
+      'relatedDriverId': relatedDriverId,
+      'relatedMonkId': relatedMonkId,
+      'processedByTreasurerId': processedByTreasurerId,
+      'balanceAfter': balanceAfter,
+    };
+  }
 }

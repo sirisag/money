@@ -40,14 +40,21 @@ class _TreasurerInitialSetupScreenState
         _isLoading = true;
       });
 
+      // Note on secondaryId:
+      // Currently, if secondaryId is empty, primaryId is used.
+      // Given that AppUser.secondaryId is marked unique in the schema,
+      // ensure this logic aligns with your uniqueness requirements for IDs.
+      // If secondaryId for Treasurer is truly optional and can be different
+      // or non-existent, the model and this logic might need adjustment.
+      final String secondaryIdValue = _secondaryIdController.text.isNotEmpty
+          ? _secondaryIdController.text
+          : _primaryIdController.text;
+
       final success = await ref
           .read(authNotifierProvider.notifier)
           .performInitialSetup(
             primaryId: _primaryIdController.text,
-            secondaryId: _secondaryIdController.text.isNotEmpty
-                ? _secondaryIdController.text
-                : _primaryIdController
-                      .text, // Use primary if secondary is empty
+            secondaryId: secondaryIdValue,
             password: _passwordController.text,
             role: UserRole.treasurer,
             displayName: _displayNameController.text,
@@ -65,10 +72,10 @@ class _TreasurerInitialSetupScreenState
               content: Text('ตั้งค่าไวยาวัจกรณ์สำเร็จ! กรุณาเข้าสู่ระบบ'),
             ),
           );
-          // TODO: Navigate to Login Screen or directly to Treasurer Dashboard if auto-login
-          Navigator.of(context).popUntil(
-            (route) => route.isFirst,
-          ); // Go back to the first screen (chooser)
+          // Navigate to Login Screen and remove all previous routes from the stack
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -84,13 +91,6 @@ class _TreasurerInitialSetupScreenState
 
   @override
   Widget build(BuildContext context) {
-    // Listen to auth state changes to potentially auto-navigate if setup is done elsewhere
-    // ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-    //   if (next.status == AuthStatus.authenticated && next.currentRole == UserRole.treasurer) {
-    //     // Navigate to dashboard or login
-    //   }
-    // });
-
     return Scaffold(
       appBar: AppBar(title: const Text('ตั้งค่าไวยาวัจกรณ์')),
       body: Padding(
@@ -103,12 +103,19 @@ class _TreasurerInitialSetupScreenState
                 controller: _primaryIdController,
                 decoration: const InputDecoration(
                   labelText: 'Primary ID (4 หลัก)',
+                  hintText: 'เช่น 0001',
                 ),
                 keyboardType: TextInputType.number,
                 maxLength: 4,
                 validator: (value) {
-                  if (value == null || value.isEmpty || value.length != 4) {
-                    return 'กรุณากรอก Primary ID 4 หลัก';
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณากรอก Primary ID';
+                  }
+                  if (value.length != 4) {
+                    return 'Primary ID ต้องมี 4 หลัก';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Primary ID ต้องเป็นตัวเลขเท่านั้น';
                   }
                   return null;
                 },
@@ -117,15 +124,27 @@ class _TreasurerInitialSetupScreenState
                 controller: _secondaryIdController,
                 decoration: const InputDecoration(
                   labelText: 'Secondary ID (4 หลัก, ถ้ามี)',
+                  hintText: 'เช่น 0002 (ถ้าไม่กรอกจะใช้ Primary ID แทน)',
                 ),
                 keyboardType: TextInputType.number,
                 maxLength: 4,
-                // Secondary ID is optional for treasurer, so no strict validation
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    if (value.length != 4) {
+                      return 'Secondary ID ต้องมี 4 หลัก (ถ้ากรอก)';
+                    }
+                    if (int.tryParse(value) == null) {
+                      return 'Secondary ID ต้องเป็นตัวเลขเท่านั้น (ถ้ากรอก)';
+                    }
+                  }
+                  return null;
+                },
               ),
               TextFormField(
                 controller: _displayNameController,
                 decoration: const InputDecoration(
                   labelText: 'ชื่อที่ใช้แสดงผล',
+                  hintText: 'เช่น ชื่อ-นามสกุล หรือชื่อเรียก',
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -139,7 +158,10 @@ class _TreasurerInitialSetupScreenState
                 decoration: const InputDecoration(labelText: 'รหัสผ่าน'),
                 obscureText: true,
                 validator: (value) {
-                  if (value == null || value.isEmpty || value.length < 6) {
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณากรอกรหัสผ่าน';
+                  }
+                  if (value.length < 6) {
                     return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
                   }
                   return null;
@@ -150,6 +172,9 @@ class _TreasurerInitialSetupScreenState
                 decoration: const InputDecoration(labelText: 'ยืนยันรหัสผ่าน'),
                 obscureText: true,
                 validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณายืนยันรหัสผ่าน';
+                  }
                   if (value != _passwordController.text) {
                     return 'รหัสผ่านไม่ตรงกัน';
                   }

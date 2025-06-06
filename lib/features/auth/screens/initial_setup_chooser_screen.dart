@@ -34,28 +34,17 @@ class InitialSetupChooserScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16.0),
               ElevatedButton(
-                onPressed: () {
-                  // TODO: Navigate to Driver Initial Setup Screen
-                  // Navigator.push(context, MaterialPageRoute(builder: (context) => const DriverInitialSetupScreen()));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('หน้าจอตั้งค่าคนขับรถ (ยังไม่ได้สร้าง)'),
-                    ),
-                  );
-                },
                 child: const Text('คนขับรถ'),
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.driverInitialSetup);
+                },
               ),
               const SizedBox(height: 16.0),
               ElevatedButton(
-                onPressed: () {
-                  // TODO: Navigate to Monk Initial Setup Screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('หน้าจอตั้งค่าพระ (ยังไม่ได้สร้าง)'),
-                    ),
-                  );
-                },
                 child: const Text('พระ'),
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.monkInitialSetup);
+                },
               ),
             ],
           ),

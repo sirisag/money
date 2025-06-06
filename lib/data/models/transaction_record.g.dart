@@ -37,30 +37,35 @@ const TransactionRecordSchema = CollectionSchema(
       name: r'driverCovered',
       type: IsarType.bool,
     ),
-    r'monkPrimaryId': PropertySchema(
+    r'driverPrimaryId': PropertySchema(
       id: 4,
+      name: r'driverPrimaryId',
+      type: IsarType.string,
+    ),
+    r'monkPrimaryId': PropertySchema(
+      id: 5,
       name: r'monkPrimaryId',
       type: IsarType.string,
     ),
     r'processedByUserId': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'processedByUserId',
       type: IsarType.string,
     ),
     r'processedByUserRole': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'processedByUserRole',
       type: IsarType.byte,
       enumMap: _TransactionRecordprocessedByUserRoleEnumValueMap,
     ),
     r'source': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'source',
       type: IsarType.byte,
       enumMap: _TransactionRecordsourceEnumValueMap,
     ),
     r'type': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'type',
       type: IsarType.byte,
       enumMap: _TransactionRecordtypeEnumValueMap,
@@ -82,6 +87,32 @@ const TransactionRecordSchema = CollectionSchema(
           name: r'monkPrimaryId',
           type: IndexType.hash,
           caseSensitive: true,
+        )
+      ],
+    ),
+    r'driverPrimaryId': IndexSchema(
+      id: 4927258635052209721,
+      name: r'driverPrimaryId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'driverPrimaryId',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'dateTime': IndexSchema(
+      id: -138851979697481250,
+      name: r'dateTime',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'dateTime',
+          type: IndexType.value,
+          caseSensitive: false,
         )
       ],
     )
@@ -113,6 +144,12 @@ int _transactionRecordEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  {
+    final value = object.driverPrimaryId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.monkPrimaryId.length * 3;
   {
     final value = object.processedByUserId;
@@ -133,11 +170,12 @@ void _transactionRecordSerialize(
   writer.writeDateTime(offsets[1], object.dateTime);
   writer.writeString(offsets[2], object.description);
   writer.writeBool(offsets[3], object.driverCovered);
-  writer.writeString(offsets[4], object.monkPrimaryId);
-  writer.writeString(offsets[5], object.processedByUserId);
-  writer.writeByte(offsets[6], object.processedByUserRole.index);
-  writer.writeByte(offsets[7], object.source.index);
-  writer.writeByte(offsets[8], object.type.index);
+  writer.writeString(offsets[4], object.driverPrimaryId);
+  writer.writeString(offsets[5], object.monkPrimaryId);
+  writer.writeString(offsets[6], object.processedByUserId);
+  writer.writeByte(offsets[7], object.processedByUserRole.index);
+  writer.writeByte(offsets[8], object.source.index);
+  writer.writeByte(offsets[9], object.type.index);
 }
 
 TransactionRecord _transactionRecordDeserialize(
@@ -151,18 +189,19 @@ TransactionRecord _transactionRecordDeserialize(
   object.dateTime = reader.readDateTime(offsets[1]);
   object.description = reader.readStringOrNull(offsets[2]);
   object.driverCovered = reader.readBool(offsets[3]);
+  object.driverPrimaryId = reader.readStringOrNull(offsets[4]);
   object.id = id;
-  object.monkPrimaryId = reader.readString(offsets[4]);
-  object.processedByUserId = reader.readStringOrNull(offsets[5]);
+  object.monkPrimaryId = reader.readString(offsets[5]);
+  object.processedByUserId = reader.readStringOrNull(offsets[6]);
   object.processedByUserRole =
       _TransactionRecordprocessedByUserRoleValueEnumMap[
-              reader.readByteOrNull(offsets[6])] ??
+              reader.readByteOrNull(offsets[7])] ??
           UserRole.treasurer;
   object.source =
-      _TransactionRecordsourceValueEnumMap[reader.readByteOrNull(offsets[7])] ??
+      _TransactionRecordsourceValueEnumMap[reader.readByteOrNull(offsets[8])] ??
           TransactionSource.directTreasurer;
   object.type =
-      _TransactionRecordtypeValueEnumMap[reader.readByteOrNull(offsets[8])] ??
+      _TransactionRecordtypeValueEnumMap[reader.readByteOrNull(offsets[9])] ??
           TransactionType.deposit;
   return object;
 }
@@ -183,18 +222,20 @@ P _transactionRecordDeserializeProp<P>(
     case 3:
       return (reader.readBool(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
-    case 5:
       return (reader.readStringOrNull(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
     case 6:
+      return (reader.readStringOrNull(offset)) as P;
+    case 7:
       return (_TransactionRecordprocessedByUserRoleValueEnumMap[
               reader.readByteOrNull(offset)] ??
           UserRole.treasurer) as P;
-    case 7:
+    case 8:
       return (_TransactionRecordsourceValueEnumMap[
               reader.readByteOrNull(offset)] ??
           TransactionSource.directTreasurer) as P;
-    case 8:
+    case 9:
       return (_TransactionRecordtypeValueEnumMap[
               reader.readByteOrNull(offset)] ??
           TransactionType.deposit) as P;
@@ -220,20 +261,24 @@ const _TransactionRecordsourceEnumValueMap = {
   'driverCollection': 1,
   'driverWithdrawal': 2,
   'notSpecified': 3,
+  'unknown': 4,
 };
 const _TransactionRecordsourceValueEnumMap = {
   0: TransactionSource.directTreasurer,
   1: TransactionSource.driverCollection,
   2: TransactionSource.driverWithdrawal,
   3: TransactionSource.notSpecified,
+  4: TransactionSource.unknown,
 };
 const _TransactionRecordtypeEnumValueMap = {
   'deposit': 0,
   'withdrawal': 1,
+  'unknown': 2,
 };
 const _TransactionRecordtypeValueEnumMap = {
   0: TransactionType.deposit,
   1: TransactionType.withdrawal,
+  2: TransactionType.unknown,
 };
 
 Id _transactionRecordGetId(TransactionRecord object) {
@@ -256,6 +301,15 @@ extension TransactionRecordQueryWhereSort
   QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhere>
+      anyDateTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'dateTime'),
+      );
     });
   }
 }
@@ -372,6 +426,166 @@ extension TransactionRecordQueryWhere
               includeUpper: false,
             ));
       }
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      driverPrimaryIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'driverPrimaryId',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      driverPrimaryIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'driverPrimaryId',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      driverPrimaryIdEqualTo(String? driverPrimaryId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'driverPrimaryId',
+        value: [driverPrimaryId],
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      driverPrimaryIdNotEqualTo(String? driverPrimaryId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'driverPrimaryId',
+              lower: [],
+              upper: [driverPrimaryId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'driverPrimaryId',
+              lower: [driverPrimaryId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'driverPrimaryId',
+              lower: [driverPrimaryId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'driverPrimaryId',
+              lower: [],
+              upper: [driverPrimaryId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      dateTimeEqualTo(DateTime dateTime) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'dateTime',
+        value: [dateTime],
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      dateTimeNotEqualTo(DateTime dateTime) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dateTime',
+              lower: [],
+              upper: [dateTime],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dateTime',
+              lower: [dateTime],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dateTime',
+              lower: [dateTime],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'dateTime',
+              lower: [],
+              upper: [dateTime],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      dateTimeGreaterThan(
+    DateTime dateTime, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'dateTime',
+        lower: [dateTime],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      dateTimeLessThan(
+    DateTime dateTime, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'dateTime',
+        lower: [],
+        upper: [dateTime],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterWhereClause>
+      dateTimeBetween(
+    DateTime lowerDateTime,
+    DateTime upperDateTime, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'dateTime',
+        lower: [lowerDateTime],
+        includeLower: includeLower,
+        upper: [upperDateTime],
+        includeUpper: includeUpper,
+      ));
     });
   }
 }
@@ -650,6 +864,160 @@ extension TransactionRecordQueryFilter
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'driverCovered',
         value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'driverPrimaryId',
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'driverPrimaryId',
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'driverPrimaryId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'driverPrimaryId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'driverPrimaryId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'driverPrimaryId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterFilterCondition>
+      driverPrimaryIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'driverPrimaryId',
+        value: '',
       ));
     });
   }
@@ -1248,6 +1616,20 @@ extension TransactionRecordQuerySortBy
   }
 
   QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy>
+      sortByDriverPrimaryId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'driverPrimaryId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy>
+      sortByDriverPrimaryIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'driverPrimaryId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy>
       sortByMonkPrimaryId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'monkPrimaryId', Sort.asc);
@@ -1376,6 +1758,20 @@ extension TransactionRecordQuerySortThenBy
     });
   }
 
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy>
+      thenByDriverPrimaryId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'driverPrimaryId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy>
+      thenByDriverPrimaryIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'driverPrimaryId', Sort.desc);
+    });
+  }
+
   QueryBuilder<TransactionRecord, TransactionRecord, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -1491,6 +1887,14 @@ extension TransactionRecordQueryWhereDistinct
   }
 
   QueryBuilder<TransactionRecord, TransactionRecord, QDistinct>
+      distinctByDriverPrimaryId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'driverPrimaryId',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<TransactionRecord, TransactionRecord, QDistinct>
       distinctByMonkPrimaryId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'monkPrimaryId',
@@ -1560,6 +1964,13 @@ extension TransactionRecordQueryProperty
       driverCoveredProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'driverCovered');
+    });
+  }
+
+  QueryBuilder<TransactionRecord, String?, QQueryOperations>
+      driverPrimaryIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'driverPrimaryId');
     });
   }
 

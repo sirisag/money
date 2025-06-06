@@ -65,7 +65,21 @@ const CentralFundTransactionSchema = CollectionSchema(
   deserialize: _centralFundTransactionDeserialize,
   deserializeProp: _centralFundTransactionDeserializeProp,
   idName: r'id',
-  indexes: {},
+  indexes: {
+    r'relatedDriverId': IndexSchema(
+      id: 1465225861294152687,
+      name: r'relatedDriverId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'relatedDriverId',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    )
+  },
   links: {},
   embeddedSchemas: {},
   getId: _centralFundTransactionGetId,
@@ -175,6 +189,7 @@ const _CentralFundTransactiontypeEnumValueMap = {
   'issueDriverAdvance': 2,
   'receiveDriverAdvanceReturn': 3,
   'reimburseDriverForExpense': 4,
+  'unknown': 5,
 };
 const _CentralFundTransactiontypeValueEnumMap = {
   0: CentralFundTransactionType.donation,
@@ -182,6 +197,7 @@ const _CentralFundTransactiontypeValueEnumMap = {
   2: CentralFundTransactionType.issueDriverAdvance,
   3: CentralFundTransactionType.receiveDriverAdvanceReturn,
   4: CentralFundTransactionType.reimburseDriverForExpense,
+  5: CentralFundTransactionType.unknown,
 };
 
 Id _centralFundTransactionGetId(CentralFundTransaction object) {
@@ -275,6 +291,73 @@ extension CentralFundTransactionQueryWhere on QueryBuilder<
         upper: upperId,
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<CentralFundTransaction, CentralFundTransaction,
+      QAfterWhereClause> relatedDriverIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'relatedDriverId',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<CentralFundTransaction, CentralFundTransaction,
+      QAfterWhereClause> relatedDriverIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'relatedDriverId',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<CentralFundTransaction, CentralFundTransaction,
+      QAfterWhereClause> relatedDriverIdEqualTo(String? relatedDriverId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'relatedDriverId',
+        value: [relatedDriverId],
+      ));
+    });
+  }
+
+  QueryBuilder<CentralFundTransaction, CentralFundTransaction,
+      QAfterWhereClause> relatedDriverIdNotEqualTo(String? relatedDriverId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'relatedDriverId',
+              lower: [],
+              upper: [relatedDriverId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'relatedDriverId',
+              lower: [relatedDriverId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'relatedDriverId',
+              lower: [relatedDriverId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'relatedDriverId',
+              lower: [],
+              upper: [relatedDriverId],
+              includeUpper: false,
+            ));
+      }
     });
   }
 }

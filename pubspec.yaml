@@ -42,6 +42,7 @@ dependencies:
 
   # For file handling
   file_picker: ^8.0.0      # To pick files for import
+  permission_handler: ^11.3.1 # หรือเวอร์ชันล่าสุ
 
   # For data encryption
   encrypt: ^5.0.3
@@ -52,6 +53,8 @@ dependencies:
 
   # For State Management
   flutter_riverpod: ^2.5.1
+  package_info_plus: ^8.0.0 # For getting app version
+  intl: ^0.19.0 # For date/number formatting, or latest version
 
 dev_dependencies:
   flutter_test:

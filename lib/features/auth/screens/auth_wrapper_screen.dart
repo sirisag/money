@@ -25,21 +25,36 @@ class AuthWrapperScreen extends ConsumerWidget {
       case AuthStatus.unauthenticated:
         return const LoginScreen();
       case AuthStatus.authenticated:
-        // Navigate to the correct dashboard based on the role
-        // This is where you'd implement role-based navigation
-        // For now, let's show a placeholder
-        // if (authState.currentRole == UserRole.treasurer) {
-        //   return const TreasurerDashboardScreen();
-        // } else if (authState.currentRole == UserRole.driver) {
-        //   return const DriverDashboardScreen();
-        // } else if (authState.currentRole == UserRole.monk) {
-        //   return const MonkDashboardScreen();
-        // }
-        return Scaffold(
-          body: Center(
-            child: Text('Authenticated! Role: ${authState.currentRole}'),
-          ),
-        );
+        if (authState.currentUser == null ||
+            authState.currentRole == null ||
+            authState.currentRole == UserRole.unknown) {
+          // This case should ideally not happen if authenticated, but it's a safeguard.
+          // Consider logging out or showing an error.
+          // Using WidgetsBinding.instance.addPostFrameCallback to avoid calling setState during build.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(authNotifierProvider.notifier).logout();
+          });
+          return const Scaffold(
+            body: Center(child: Text('Authentication error. Logging out...')),
+          );
+        }
+        switch (authState.currentRole!) {
+          case UserRole.treasurer:
+            return const TreasurerDashboardScreen();
+          case UserRole.driver:
+            return const DriverDashboardScreen();
+          case UserRole.monk:
+            return const MonkDashboardScreen();
+          default:
+            // Fallback, or perhaps logout if role is truly unknown/invalid
+            return Scaffold(
+              body: Center(
+                child: Text(
+                  'Authenticated! Unknown Role: ${authState.currentRole}',
+                ),
+              ),
+            );
+        }
     }
   }
 }

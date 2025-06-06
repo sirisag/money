@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'encryption_service.dart';
+import 'package:money/services/encryption_service.dart';
 
-/// Provider for the EncryptionService.
-/// This makes the EncryptionService instance available throughout the app.
+// Define a provider for the EncryptionService
 final encryptionServiceProvider = Provider<EncryptionService>((ref) {
-  return EncryptionService(); // Creates and returns an instance of EncryptionService
+  // Create and return an instance of EncryptionService
+  return EncryptionService();
 });

@@ -38,7 +38,8 @@ class AuthService with ChangeNotifier {
       _authStatus = AuthStatus.unauthenticated;
       // If you had a way to know the last logged-in user and role:
       // _currentUser = lastLoggedInUser;
-      // _currentRole = lastLoggedInUser.role;
+      // _currentRole = lastLoggedInUser.role;org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m # ตัวอย่าง เพิ่มเป็น 2GB
+
       // _authStatus = AuthStatus.authenticated;
     }
     notifyListeners();

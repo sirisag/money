@@ -81,6 +81,28 @@ class AuthNotifier extends Notifier<AuthState> {
         return false;
       }
 
+      // Check if secondaryId already exists (as primary or secondary)
+      // This assumes secondaryId must also be unique across all primary and secondary IDs.
+      // Adjust logic if secondaryId only needs to be unique among secondaryIds or can be same as another user's primary.
+      final existingUserBySecondaryAsPrimary = await _isarService
+          .getAppUserByPrimaryId(secondaryId);
+      if (existingUserBySecondaryAsPrimary != null &&
+          existingUserBySecondaryAsPrimary.primaryId != primaryId) {
+        debugPrint(
+          "Error: Secondary ID $secondaryId conflicts with an existing Primary ID.",
+        );
+        return false;
+      }
+      final existingUserBySecondary = await _isarService
+          .getAppUserBySecondaryId(secondaryId);
+      if (existingUserBySecondary != null &&
+          existingUserBySecondary.primaryId != primaryId) {
+        debugPrint(
+          "Error: Secondary ID $secondaryId already exists as a Secondary ID for another user.",
+        );
+        return false;
+      }
+
       final hashedPassword = _encryptionService.hashPassword(password);
       final newUser = AppUser()
         ..primaryId = primaryId
@@ -91,9 +113,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
       await _isarService.saveAppUser(newUser);
       state = state.copyWith(
-        status: AuthStatus.authenticated,
-        currentUser: newUser,
-        currentRole: newUser.role,
+        // Change to unauthenticated to force login after setup,
+        status: AuthStatus.unauthenticated,
+        clearCurrentUser: true, // Clear current user if going to login
+        clearCurrentRole: true, // Clear current role if going to login
       );
       return true;
     } catch (e) {
@@ -128,6 +151,44 @@ class AuthNotifier extends Notifier<AuthState> {
       clearCurrentUser: true,
       clearCurrentRole: true,
     );
+  }
+
+  Future<bool> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    if (state.currentUser == null) {
+      debugPrint("No current user to change password for.");
+      return false;
+    }
+
+    final user = state.currentUser!;
+    if (user.hashedPassword == null) {
+      debugPrint("User does not have a hashed password set.");
+      // This might indicate an issue with user setup or data integrity
+      return false;
+    }
+
+    // Verify current password
+    if (!_encryptionService.verifyPassword(
+      currentPassword,
+      user.hashedPassword!,
+    )) {
+      debugPrint("Current password verification failed.");
+      return false; // Current password does not match
+    }
+
+    // Hash the new password
+    final newHashedPassword = _encryptionService.hashPassword(newPassword);
+    user.hashedPassword = newHashedPassword;
+
+    try {
+      await _isarService.saveAppUser(user);
+      return true;
+    } catch (e) {
+      debugPrint("Error saving new password: $e");
+      return false;
+    }
   }
 }
 
