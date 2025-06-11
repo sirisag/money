@@ -655,22 +655,57 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
   Future<void> _proceedWithUpdateExport(User driver, int newAdvanceAmount,
       Map<String, int> monkTransfers, String currentTreasurerId) async {
     setState(() => _isLoading = true);
+    String? exportedFilePath; // To store the path from the transaction
+
     try {
+      final prefs = await SharedPreferences.getInstance(); // Fetch prefs once
+      final String? treasurerPrimaryId = prefs.getString('user_primary_id');
+      final String? treasurerSecondaryId = prefs.getString('user_secondary_id');
+
+      if (treasurerPrimaryId == null || treasurerSecondaryId == null) {
+        throw Exception('ไม่พบ ID ไวยาวัจกรณ์ปัจจุบัน');
+      }
+      if (treasurerPrimaryId != currentTreasurerId) {
+        throw Exception('ID ไวยาวัจกรณ์ไม่ตรงกันระหว่างการดำเนินการ');
+      }
+
+      // --- BEGIN PRE-VALIDATION ---
+      List<String> insufficientFundMonks = [];
+      for (var entry in monkTransfers.entries) {
+        if (entry.value > 0) {
+          final monkId = entry.key;
+          final amountToTransfer = entry.value;
+          MonkFundAtTreasurer? mFund = await _dbHelper.getMonkFundAtTreasurer(
+              monkId, treasurerPrimaryId); // No txn here
+          if (mFund == null || mFund.balance < amountToTransfer) {
+            User? monkUser = await _dbHelper.getUser(monkId);
+            insufficientFundMonks.add(monkUser?.displayName ?? monkId);
+          }
+        }
+      }
+
+      if (insufficientFundMonks.isNotEmpty) {
+        // ignore: use_build_context_synchronously
+        if (!mounted) return;
+        await showDialog(
+            context: context,
+            builder: (dialogCtx) => AlertDialog(
+                  title: const Text('ยอดเงินไม่เพียงพอ'),
+                  content: Text(
+                      'ไม่สามารถโอนเงินให้พระต่อไปนี้ได้เนื่องจากยอดเงินในบัญชี (กับไวยาวัจกรณ์) ไม่เพียงพอ:\n- ${insufficientFundMonks.join("\n- ")}\n\nกรุณาตรวจสอบยอดเงินของพระ หรือปรับปรุงจำนวนเงินที่จะโอน'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                        child: const Text('ตกลง'))
+                  ],
+                ));
+        setState(() => _isLoading = false);
+        return; // Abort operation
+      }
+      // --- END PRE-VALIDATION ---
+
       final db = await _dbHelper.database;
       await db.transaction((txn) async {
-        final prefs = await SharedPreferences.getInstance();
-        final String? treasurerPrimaryId = prefs.getString('user_primary_id');
-        final String? treasurerSecondaryId =
-            prefs.getString('user_secondary_id');
-
-        if (treasurerPrimaryId == null || treasurerSecondaryId == null) {
-          throw Exception('ไม่พบ ID ไวยาวัจกรณ์ปัจจุบัน');
-        }
-
-        if (treasurerPrimaryId != currentTreasurerId) {
-          throw Exception('ID ไวยาวัจกรณ์ไม่ตรงกันระหว่างการดำเนินการ');
-        }
-
         if (newAdvanceAmount > 0) {
           final giveAdvanceTx = Transaction.create(
             type: TransactionType.GIVE_DRIVER_ADVANCE,
@@ -705,18 +740,10 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
 
             MonkFundAtTreasurer? mFund = await _dbHelper
                 .getMonkFundAtTreasurer(monkId, treasurerPrimaryId, txn: txn);
+            // This check is now a safeguard, primary validation is outside.
             if (mFund == null || mFund.balance < amountToTransfer) {
-              // Consider throwing an exception here to rollback the transaction if this is critical
-              // For now, show a message and skip, but this might lead to inconsistencies.
-              // A better approach might be to validate all transfers before starting the DB transaction.
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text(
-                          'ยอดเงินของพระ $monkId ไม่เพียงพอสำหรับการโอน จะไม่ทำการโอนรายการนี้')),
-                );
-              }
-              continue; // Skip this transfer
+              throw Exception(
+                  'ยอดเงินของพระ $monkId ไม่เพียงพอ (ตรวจสอบซ้ำภายใน transaction)');
             }
 
             final transferTx = Transaction.create(
@@ -740,7 +767,7 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
         }
 
         // Export file after all DB operations in transaction are successful
-        final String? filePath =
+        exportedFilePath =
             await _fileExportService.exportTreasurerUpdateToDriver(
           driverToUpdate: driver,
           newAdvanceGiven: newAdvanceAmount,
@@ -749,24 +776,23 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
           treasurerSecondaryId: treasurerSecondaryId,
         );
 
-        if (filePath == null) {
-          throw Exception("การสร้างไฟล์อัปเดตล้มเหลว");
-        }
-        // If we reach here, transaction is successful and file is created.
-        // Share outside transaction block.
-        // Ensure mounted is checked before UI operations after async gaps
-        if (mounted && filePath != null) {
-          final params = ShareParams(
-              files: [XFile(filePath)],
-              text: 'ไฟล์อัปเดตสำหรับคนขับรถ ${driver.displayName}');
-          await SharePlus.instance.share(params);
-          // Check mounted again before showing another dialog
-          // ignore: use_build_context_synchronously
-          if (mounted) {
-            await _showShareSuccessDialog(driver.displayName);
-          }
+        if (exportedFilePath == null) {
+          throw Exception("การสร้างไฟล์อัปเดตล้มเหลว (FES returned null)");
         }
       }); // End transaction
+
+      // --- AFTER SUCCESSFUL TRANSACTION AND FILE CREATION ---
+      if (exportedFilePath != null && mounted) {
+        final params = ShareParams(
+            files: [XFile(exportedFilePath!)],
+            text: 'ไฟล์อัปเดตสำหรับคนขับรถ ${driver.displayName}');
+        await SharePlus.instance.share(params);
+        // Check mounted again before showing another dialog
+        // ignore: use_build_context_synchronously
+        if (mounted) {
+          await _showShareSuccessDialog(driver.displayName);
+        }
+      }
       _loadInitialData(); // Refresh driver list and advances
     } catch (e) {
       if (mounted) {
@@ -886,11 +912,34 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
                         try {
                           final db = await _dbHelper.database;
                           await db.transaction((txn) async {
-                            for (final tx in transactionsToCommit) {
-                              await _dbHelper.insertTransaction(tx, txn: txn);
+                            Set<String> existingTxnUuids = {};
+                            for (final txToCommit in transactionsToCommit) {
+                              final existingTx = await _dbHelper
+                                  .getTransaction(txToCommit.uuid, txn: txn);
+                              if (existingTx != null &&
+                                  existingTx.status ==
+                                      TransactionStatus.reconciledByTreasurer) {
+                                print(
+                                    "Skipping already reconciled transaction: ${txToCommit.uuid}");
+                                continue; // Skip this transaction
+                              }
+                              if (existingTx != null &&
+                                  existingTx.status !=
+                                      TransactionStatus.reconciledByTreasurer) {
+                                // If exists and not reconciled, it might be an update or resend.
+                                // For now, we'll replace. Consider more sophisticated logic if needed.
+                                await _dbHelper.updateTransactionFields(
+                                    txToCommit,
+                                    txn:
+                                        txn); // You'll need to create this method
+                              } else if (existingTx == null) {
+                                await _dbHelper.insertTransaction(txToCommit,
+                                    txn: txn);
+                              }
                             }
-                            for (final monk in newMonksToCommit) {
-                              await _dbHelper.insertUser(monk, txn: txn);
+                            // Correctly loop through newMonksToCommit to insert new users
+                            for (final newMonk in newMonksToCommit) {
+                              await _dbHelper.insertUser(newMonk, txn: txn);
                             }
                           });
                           if (mounted) {

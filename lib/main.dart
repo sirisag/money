@@ -2,19 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart'; // Import for date formatting initialization
 import 'package:money/screens/auth/universal_login_setup_screen.dart';
-// import 'package:money/services/database_helper.dart'; // หากมีการใช้งาน DB ใน main
-
-// Global instance of SharedPreferences
-// SharedPreferences? globalPrefs; // คุณสามารถใช้ SharedPreferences.getInstance() โดยตรงในหน้าที่ต้องการได้
-// หรือถ้าจะใช้ global instance ก็ตรวจสอบให้แน่ใจว่ามีการจัดการ lifecycle ที่เหมาะสม
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Initialize date formatting for the Thai locale
   await initializeDateFormatting('th_TH', null);
-
-  // Initialize SharedPreferences if you plan to use a global instance
-  // globalPrefs = await SharedPreferences.getInstance();
 
   // Initialize database (optional here, as it will be initialized when first called by DatabaseHelper)
   // await DatabaseHelper().database;

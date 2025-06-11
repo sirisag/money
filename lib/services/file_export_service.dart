@@ -92,48 +92,17 @@ class FileExportService {
     required String driverPrimaryId,
     required String driverSecondaryId,
     required String driverDisplayName,
-    required List<User>
-        selectedMonksToExport, // Monks whose funds are being sent
+    required List<Transaction>
+        monkTransactions, // Pass pre-fetched and filtered transactions
+    required List<Transaction>
+        tripExpenses, // Pass pre-fetched and filtered transactions
+    required List<User> newMonks, // Pass pre-fetched new monks
     required int advanceReturnedAmount,
     required String treasurerPrimaryId, // For encryption
     required String treasurerSecondaryId, // For encryption
   }) async {
     try {
       final timestamp = DateTime.now().toIso8601String();
-
-      // 1. Fetch relevant transactions from DB
-      List<Transaction> monkTransactionsToExport = [];
-      for (var monk in selectedMonksToExport) {
-        final transactions = await _dbHelper.getTransactionsForMonkAndDriver(
-            monk.primaryId, driverPrimaryId,
-            status: TransactionStatus.pendingExport);
-        monkTransactionsToExport.addAll(transactions);
-      }
-
-      final List<Transaction> tripExpensesToExport =
-          await _dbHelper.getTransactionsByTypeAndStatus(
-              driverPrimaryId,
-              TransactionType.TRIP_EXPENSE_BY_DRIVER,
-              TransactionStatus.pendingExport);
-
-      // Fetch new monks created by this driver that haven't been exported yet
-      // This requires a way to mark monks as "exported" or filter by creation context if needed.
-      // For simplicity, let's assume we might need a more robust way if this becomes complex.
-      // For now, a placeholder or a simple fetch of monks created by driver.
-      final List<User> allDriverCreatedMonks =
-          await _dbHelper.getUsersByRole(UserRole.monk);
-      final List<User> newMonksCreatedByDriver =
-          allDriverCreatedMonks.where((monk) {
-        // Example filter: monks created by driver (ID range) and perhaps a status indicating "new"
-        // This logic needs to be robust based on how you track "new" monks.
-        // For now, let's assume all monks in driver's ID range are potentially "new" if not yet known by treasurer.
-        // A more robust system might involve a flag on the User model or a separate tracking table.
-        final monkIdNum = int.tryParse(monk.primaryId);
-        return monkIdNum != null &&
-            monkIdNum >= AppConstants.monkPrimaryIdDriverMin &&
-            monkIdNum <= AppConstants.monkPrimaryIdDriverMax;
-      }).toList();
-
       // 2. Prepare data structure
       final dataToExport = {
         'metadata': {
@@ -147,12 +116,10 @@ class FileExportService {
           'primaryId': driverPrimaryId,
           'displayName': driverDisplayName,
         },
-        'monkTransactions':
-            monkTransactionsToExport.map((tx) => tx.toMap()).toList(),
-        'tripExpenses': tripExpensesToExport.map((tx) => tx.toMap()).toList(),
-        'newMonksCreatedByDriver': newMonksCreatedByDriver
-            .map((user) => user.toMap(forFileExport: true))
-            .toList(),
+        'monkTransactions': monkTransactions.map((tx) => tx.toMap()).toList(),
+        'tripExpenses': tripExpenses.map((tx) => tx.toMap()).toList(),
+        'newMonksCreatedByDriver':
+            newMonks.map((user) => user.toMap(forFileExport: true)).toList(),
         'advanceReturnedToTemple': {
           'amount': advanceReturnedAmount,
           'note': 'คืนเงินสำรองเดินทาง', // Default note
@@ -265,14 +232,22 @@ class FileExportService {
               existingTransaction.status !=
                   TransactionStatus.reconciledByTreasurer) {
             transactionsToCommit.add(finalTransaction);
+
+            // Accumulate totalMonkFundsReceived ONLY from FORWARD_MONK_FUND_TO_TREASURER transactions
+            if (finalTransaction.type ==
+                TransactionType.FORWARD_MONK_FUND_TO_TREASURER) {
+              totalMonkFundsReceived += finalTransaction.amount;
+            }
+            // The original DEPOSIT_FROM_MONK_TO_DRIVER and WITHDRAWAL_FOR_MONK_FROM_DRIVER
+            // are still imported for audit/detail but do not contribute to the cash treasurer expects to receive directly.
+            // That cash amount is now represented by FORWARD_MONK_FUND_TO_TREASURER.
+
+            // Old logic for summing up individual monk tx for totalMonkFundsReceived:
+            // if (!processedMonkTxUuids.contains(finalTransaction.uuid)) { ... }
+            // This processedMonkTxUuids logic might still be useful if you want to avoid double-counting
+            // other transaction types if they could somehow be duplicated in the list.
+            // For FORWARD_MONK_FUND_TO_TREASURER, there should ideally be only one active per monk per export.
             if (!processedMonkTxUuids.contains(finalTransaction.uuid)) {
-              if (finalTransaction.type ==
-                  TransactionType.DEPOSIT_FROM_MONK_TO_DRIVER) {
-                totalMonkFundsReceived += finalTransaction.amount;
-              } else if (finalTransaction.type ==
-                  TransactionType.WITHDRAWAL_FOR_MONK_FROM_DRIVER) {
-                totalMonkFundsReceived -= finalTransaction.amount;
-              }
               processedMonkTxUuids.add(finalTransaction.uuid);
             }
           } else {

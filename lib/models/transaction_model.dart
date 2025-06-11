@@ -49,6 +49,9 @@ enum TransactionType {
   /// ไวยาวัจกรณ์โอนเงินฝากของพระให้คนขับรถดูแลต่อ
   TRANSFER_MONK_FUND_TO_DRIVER,
 
+  /// คนขับรถส่งยอดเงินสุทธิของพระที่ตนดูแลอยู่คืนให้กับไวยาวัจกรณ์
+  FORWARD_MONK_FUND_TO_TREASURER,
+
   /// พระฝากเงินกับไวยาวัจกรณ์โดยตรง
   DEPOSIT_FROM_MONK_TO_TREASURER,
 

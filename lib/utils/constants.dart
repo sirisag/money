@@ -73,6 +73,8 @@ class TransactionTypeNames {
   static const String initialDriverAdvance = 'ยอดเงินสำรองเดินทางเริ่มต้น';
   static const String initialTempleFund = 'ยอดเงินกองกลางวัดเริ่มต้น';
   static const String balanceAdjustment = 'ปรับปรุงยอด';
+  static const String forwardMonkFundToTreasurer =
+      'คนขับส่งยอดปัจจัยพระคืนไวยาวัจกรณ์';
 }
 
 class UserRoleNames {

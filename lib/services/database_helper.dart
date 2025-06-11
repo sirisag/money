@@ -599,6 +599,18 @@ class DatabaseHelper {
     return null;
   }
 
+  Future<int> updateTransactionFields(model.Transaction transaction,
+      {sqflite.Transaction? txn}) async {
+    final sqflite.DatabaseExecutor dbClient = txn ?? await database;
+    return await dbClient.update(
+      tableTransactions,
+      transaction
+          .toMap(), // This will update all fields based on the new transaction object
+      where: 'uuid = ?',
+      whereArgs: [transaction.uuid],
+    );
+  }
+
   Future<void> updateTempleFundBalance(
       String treasurerPrimaryId, int amountChange,
       {sqflite.Transaction? txn}) async {

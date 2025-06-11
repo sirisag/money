@@ -1,5 +1,6 @@
 // lib/screens/dashboard/driver_dashboard_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // Import for kDebugMode
 import 'package:flutter/services.dart'; // Import for FilteringTextInputFormatter
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:money/screens/auth/universal_login_setup_screen.dart'; // For logout
@@ -388,11 +389,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       return;
     }
     setState(() => _isProcessingFile = true);
-    if (!mounted) return; // Check after setState before async operations
 
+    String? finalFilePath; // Variable to hold the path if everything succeeds
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (!mounted) return;
 
       final driverDisplayName =
           prefs.getString(AppConstants.userDisplayName) ?? "คนขับรถ";
@@ -413,93 +413,163 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         throw Exception("ข้อมูล ID ที่จำเป็นสำหรับการส่งออกไม่ครบถ้วน");
       }
 
-      String? filePath;
+      // --- Prepare data for export and DB update (Read operations before DB transaction) ---
+      List<Transaction> pendingMonkTransactions = [];
+      // This list will hold the FORWARD_MONK_FUND_TO_TREASURER transactions
+      // that will be created and included in the export file.
+      List<Transaction> monkFundForwardTransactionsToExport = [];
+
+      for (var monkUser in monksToExport) {
+        // monksToExport is List<User> from dialog
+        final transactions = await _dbHelper.getTransactionsForMonkAndDriver(
+            monkUser.primaryId, _currentDriverId!,
+            status: TransactionStatus.pendingExport);
+        pendingMonkTransactions.addAll(transactions);
+      }
+      // For selected monks, create FORWARD_MONK_FUND_TO_TREASURER transactions
+      // These will be added to the export file.
+      // The actual MonkFundAtDriver balance will NOT be set to 0 here yet.
+      // It will be set to 0 only after treasurer confirms reconciliation.
+      for (var monkUser in monksToExport) {
+        final MonkFundAtDriver? monkFund = await _dbHelper.getMonkFundAtDriver(
+            monkUser.primaryId, _currentDriverId!);
+        if (monkFund != null && monkFund.balance != 0) {
+          // Create a transaction to represent the forwarding of this balance
+          final forwardTx = Transaction.create(
+            type: TransactionType.FORWARD_MONK_FUND_TO_TREASURER,
+            amount: monkFund.balance, // The current balance to be forwarded
+            note: 'ส่งยอดปัจจัยของ ${monkUser.displayName} ให้ไวยาวัจกรณ์',
+            recordedByPrimaryId: _currentDriverId!,
+            sourceAccountId: monkUser.primaryId, // Monk's fund with driver
+            destinationAccountId:
+                treasurerPrimaryId, // Destination is the treasurer
+            status: TransactionStatus.exportedToTreasurer, // New status
+          );
+          monkFundForwardTransactionsToExport.add(forwardTx);
+        }
+      }
+
+      final List<Transaction> pendingTripExpenses =
+          await _dbHelper.getTransactionsByTypeAndStatus(
+              _currentDriverId!,
+              TransactionType.TRIP_EXPENSE_BY_DRIVER,
+              TransactionStatus.pendingExport);
+
+      final List<User> allMonksInDb =
+          await _dbHelper.getUsersByRole(UserRole.monk);
+      final List<User> newMonksPotentiallyCreatedByDriver =
+          allMonksInDb.where((monk) {
+        final monkIdNum = int.tryParse(monk.primaryId);
+        return monkIdNum != null &&
+            monkIdNum >= AppConstants.monkPrimaryIdDriverMin &&
+            monkIdNum <= AppConstants.monkPrimaryIdDriverMax;
+        // Note: Treasurer import logic handles if monk already exists.
+      }).toList();
+
       final db = await _dbHelper.database;
-      if (!mounted) return; // Check after await before transaction
       await db.transaction((txn) async {
-        filePath = await _fileExportService.exportDriverDataToTreasurer(
-          driverPrimaryId: _currentDriverId!,
-          driverSecondaryId: driverSecondaryId,
-          driverDisplayName: driverDisplayName,
-          selectedMonksToExport: monksToExport,
-          advanceReturnedAmount: advanceReturned,
-          treasurerPrimaryId: treasurerPrimaryId,
-          treasurerSecondaryId: treasurerSecondaryId,
-        );
-        // No mounted check needed here as we are inside a transaction callback
-
-        if (filePath == null) {
-          // This exception will be caught by the outer try-catch and handled there.
-          throw Exception("การสร้างไฟล์ส่งออกล้มเหลว");
-        }
-
-        // Update local database within the same transaction:
-        List<Transaction> transactionsToUpdateStatus = [];
-        for (var monk in monksToExport) {
-          final monkTransactions =
-              await _dbHelper.getTransactionsForMonkAndDriver(
-                  monk.primaryId, _currentDriverId!,
-                  status: TransactionStatus.pendingExport,
-                  txn: txn); // Pass txn
-          transactionsToUpdateStatus.addAll(monkTransactions);
-        }
-        final tripExpenses = await _dbHelper.getTransactionsByTypeAndStatus(
-            _currentDriverId!,
-            TransactionType.TRIP_EXPENSE_BY_DRIVER,
-            TransactionStatus.pendingExport,
-            txn: txn); // Pass txn
-        transactionsToUpdateStatus.addAll(tripExpenses);
-
-        for (var txToUpdate in transactionsToUpdateStatus) {
+        // --- DB UPDATES ---
+        // Update status of original monk transactions
+        for (var txToUpdate in pendingMonkTransactions) {
           await _dbHelper.updateTransactionStatus(
               txToUpdate.uuid, TransactionStatus.exportedToTreasurer,
-              txn: txn); // Pass txn
+              txn: txn);
+        }
+        // Update status of trip expenses
+        for (var txToUpdate in pendingTripExpenses) {
+          await _dbHelper.updateTransactionStatus(
+              txToUpdate.uuid, TransactionStatus.exportedToTreasurer,
+              txn: txn);
         }
 
-        for (var monk in monksToExport) {
-          await _dbHelper.insertOrUpdateMonkFundAtDriver(
-              MonkFundAtDriver(
-                monkPrimaryId: monk.primaryId,
-                driverPrimaryId: _currentDriverId!,
-                balance: 0,
-                lastUpdated: DateTime.now(),
-              ),
-              txn: txn); // Pass txn
+        // Insert the new FORWARD_MONK_FUND_TO_TREASURER transactions into driver's DB
+        for (var forwardTx in monkFundForwardTransactionsToExport) {
+          // Check if a similar pending forward transaction exists for this monk
+          // and set its status to 'cancelled' or 'superseded' before inserting the new one.
+          // This prevents multiple active forward transactions for the same monk.
+          final existingForwardTxs = await txn.query(
+            DatabaseHelper.tableTransactions,
+            where:
+                'sourceAccountId = ? AND recordedByPrimaryId = ? AND type = ? AND status = ?',
+            whereArgs: [
+              forwardTx.sourceAccountId, // monk's primaryId
+              _currentDriverId,
+              TransactionType.FORWARD_MONK_FUND_TO_TREASURER.name,
+              TransactionStatus
+                  .exportedToTreasurer.name // or pendingTreasurerConfirmation
+            ],
+          );
+
+          for (var oldTxMap in existingForwardTxs) {
+            final oldTx = Transaction.fromMap(oldTxMap);
+            await _dbHelper.updateTransactionStatus(oldTx.uuid,
+                TransactionStatus.cancelled, // Or a new 'superseded' status
+                txn: txn);
+            if (kDebugMode) {
+              print(
+                  "Cancelled old FORWARD_MONK_FUND_TO_TREASURER tx: ${oldTx.uuid} for monk ${forwardTx.sourceAccountId}");
+            }
+          }
+          await _dbHelper.insertTransaction(forwardTx, txn: txn);
         }
 
-        if (advanceReturned > 0 && _driverAdvanceAccount != null) {
-          // Ensure _driverAdvanceAccount is fetched within transaction or passed if needed
-          // For simplicity, assuming it's up-to-date or re-fetch if critical
+        // DO NOT set MonkFundAtDriver.balance to 0 here.
+        // This will be done when the driver imports the update file from the treasurer
+        // confirming that the FORWARD_MONK_FUND_TO_TREASURER transaction was reconciled.
+
+        if (advanceReturned > 0) {
           DriverAdvanceAccount? currentAdvanceInTx =
               await _dbHelper.getDriverAdvance(_currentDriverId!, txn: txn);
           if (currentAdvanceInTx != null) {
             currentAdvanceInTx.balance -= advanceReturned;
             currentAdvanceInTx.lastUpdated = DateTime.now();
             await _dbHelper.insertOrUpdateDriverAdvance(currentAdvanceInTx,
-                txn: txn); // Pass txn
-            // Update the state variable after successful transaction if needed, or rely on _loadDriverAdvanceBalance
-            // _driverAdvanceAccount = currentAdvanceInTx; // This should be done outside transaction, after success
+                txn: txn);
+          } else {
+            print(
+                "DriverAdvanceAccount not found for driver $_currentDriverId during advance return. Balance not updated in transaction.");
           }
+        }
+
+        // --- FILE EXPORT (after successful DB updates within transaction) ---
+        finalFilePath = await _fileExportService.exportDriverDataToTreasurer(
+          driverPrimaryId: _currentDriverId!,
+          driverSecondaryId: driverSecondaryId, // Already checked for null
+          driverDisplayName: driverDisplayName,
+          // Send both original pending transactions AND the new forward transactions
+          monkTransactions: [
+            ...pendingMonkTransactions,
+            ...monkFundForwardTransactionsToExport
+          ],
+          tripExpenses: pendingTripExpenses,
+          newMonks: newMonksPotentiallyCreatedByDriver,
+          advanceReturnedAmount: advanceReturned,
+          treasurerPrimaryId: treasurerPrimaryId, // Already checked for null
+          treasurerSecondaryId:
+              treasurerSecondaryId, // Already checked for null
+        );
+
+        if (finalFilePath == null) {
+          throw Exception("การสร้างไฟล์ส่งออกล้มเหลว (FES returned null)");
         }
       }); // End transaction
 
-      if (filePath != null && mounted) {
-        // filePath will be non-null if transaction succeeded
-
+      // --- AFTER SUCCESSFUL TRANSACTION AND FILE CREATION ---
+      if (finalFilePath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('ส่งออกข้อมูลสำเร็จ!')),
         );
-        Share.shareXFiles([XFile(filePath!)],
+        Share.shareXFiles([XFile(finalFilePath!)],
             text: 'ไฟล์ข้อมูลจากคนขับรถ $driverDisplayName');
         _loadDriverAdvanceBalance(); // Refresh balance
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('การส่งออกข้อมูลล้มเหลว หรือไฟล์ไม่ได้ถูกสร้าง')));
+        // This path should ideally not be hit if finalFilePath is null due to exception in transaction
+        // ScopedMessenger.of(context).showSnackBar(const SnackBar(content: Text('การส่งออกข้อมูลล้มเหลว หรือไฟล์ไม่ได้ถูกสร้าง')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('เกิดข้อผิดพลาดในการส่งออก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessingFile = false);
@@ -574,6 +644,35 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   final status = TransactionStatus.values.byName(statusString);
                   await _dbHelper.updateTransactionStatus(uuid, status,
                       txn: txn);
+
+                  // If a FORWARD_MONK_FUND_TO_TREASURER transaction is reconciled,
+                  // set the MonkFundAtDriver.balance to 0 for that monk.
+                  if (status == TransactionStatus.reconciledByTreasurer) {
+                    final reconciledTx =
+                        await _dbHelper.getTransaction(uuid, txn: txn);
+                    if (reconciledTx != null &&
+                        reconciledTx.type ==
+                            TransactionType.FORWARD_MONK_FUND_TO_TREASURER &&
+                        reconciledTx.sourceAccountId != null) {
+                      // sourceAccountId is monk's ID
+
+                      MonkFundAtDriver? monkFund =
+                          await _dbHelper.getMonkFundAtDriver(
+                              reconciledTx.sourceAccountId!, driverPrimaryId,
+                              txn: txn);
+
+                      if (monkFund != null) {
+                        monkFund.balance = 0; // Clear the balance
+                        monkFund.lastUpdated = DateTime.now();
+                        await _dbHelper.insertOrUpdateMonkFundAtDriver(monkFund,
+                            txn: txn);
+                        if (kDebugMode) {
+                          print(
+                              "MonkFundAtDriver for ${reconciledTx.sourceAccountId} cleared after FORWARD_MONK_FUND_TO_TREASURER reconciliation.");
+                        }
+                      }
+                    }
+                  }
                 } catch (e) {
                   // Consider logging this error more formally if needed
                   print("Error parsing status $statusString for tx $uuid: $e");

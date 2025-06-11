@@ -150,33 +150,16 @@ class _ReconcileTransactionsScreenState
       await db.transaction((txn) async {
         // Ensure all DB operations are in a transaction
         // 1. Update relevant account balances based on transaction type
-        if (transaction.type == TransactionType.DEPOSIT_FROM_MONK_TO_DRIVER ||
-            transaction.type ==
-                TransactionType.WITHDRAWAL_FOR_MONK_FROM_DRIVER) {
-          String? monkId;
-          int amountEffectOnMonkFundAtTreasurer = 0;
-          int amountEffectOnTempleFund = 0;
+        if (transaction.type ==
+            TransactionType.FORWARD_MONK_FUND_TO_TREASURER) {
+          // This is the net amount driver is forwarding for a specific monk.
+          // sourceAccountId is monk's ID, destinationAccountId is treasurer's ID.
+          final monkId = transaction.sourceAccountId;
+          final treasurerId = transaction.destinationAccountId;
 
-          if (transaction.type == TransactionType.DEPOSIT_FROM_MONK_TO_DRIVER) {
-            // Driver received money from monk and is now giving it to the treasurer.
-            // The treasurer's fund for this monk should INCREASE.
-            // The temple's overall fund should INCREASE.
-            monkId =
-                transaction.sourceAccountId; // Monk who deposited with driver
-            amountEffectOnMonkFundAtTreasurer = transaction.amount;
-            amountEffectOnTempleFund =
-                transaction.amount; // Money comes into temple
-          } else if (transaction.type ==
-              TransactionType.WITHDRAWAL_FOR_MONK_FROM_DRIVER) {
-            // Driver gave money to monk (from driver's advance or monk's money with driver).
-            // Treasurer is now settling this by adjusting the monk's balance with treasurer.
-            // The treasurer's fund for this monk should DECREASE.
-            // The temple's overall fund should DECREASE (as if treasurer paid it out).
-            monkId =
-                transaction.destinationAccountId; // Monk who received money
-            amountEffectOnMonkFundAtTreasurer = -transaction.amount;
-            amountEffectOnTempleFund =
-                -transaction.amount; // Money goes out of temple
+          if (treasurerId != _currentTreasurerId) {
+            throw Exception(
+                'Treasurer ID in transaction does not match current treasurer.');
           }
 
           if (monkId != null && monkId.isNotEmpty) {
@@ -187,18 +170,31 @@ class _ReconcileTransactionsScreenState
                 treasurerPrimaryId: _currentTreasurerId!,
                 balance: 0,
                 lastUpdated: DateTime.now());
-            monkFund.balance += amountEffectOnMonkFundAtTreasurer;
+            monkFund.balance +=
+                transaction.amount; // Increase monk's fund with treasurer
             monkFund.lastUpdated = DateTime.now();
             await _dbHelper.insertOrUpdateMonkFundAtTreasurer(monkFund,
                 txn: txn);
 
             // Update Temple Fund
             await _dbHelper.updateTempleFundBalance(
-                _currentTreasurerId!, amountEffectOnTempleFund,
+                // Money comes into temple
+                _currentTreasurerId!,
+                transaction.amount,
                 txn: txn);
           } else {
-            throw Exception('ไม่พบ Monk ID สำหรับการกระทบยอดรายการของพระ');
+            throw Exception(
+                'ไม่พบ Monk ID สำหรับ FORWARD_MONK_FUND_TO_TREASURER');
           }
+        } else if (transaction.type ==
+                TransactionType.DEPOSIT_FROM_MONK_TO_DRIVER ||
+            transaction.type ==
+                TransactionType.WITHDRAWAL_FOR_MONK_FROM_DRIVER) {
+          // These are original transactions from the driver for audit.
+          // Their financial impact on treasurer's books is handled by FORWARD_MONK_FUND_TO_TREASURER.
+          // So, just mark them as reconciled. No balance changes here.
+          print(
+              "Reconciling driver's original monk transaction ${transaction.uuid} for audit. No balance change.");
         } else if (transaction.type == TransactionType.TRIP_EXPENSE_BY_DRIVER) {
           // When a trip expense is reconciled, it means the treasurer accepts this expense
           // and it should be deducted from the driver's advance balance held by the treasurer.
@@ -250,6 +246,7 @@ class _ReconcileTransactionsScreenState
                 'ไม่พบ Driver ID สำหรับการกระทบยอดรายการคืนเงินสำรอง');
           }
         }
+
         // 2. Update transaction status to reconciled
         await _dbHelper.updateTransactionStatus(
             transaction.uuid, TransactionStatus.reconciledByTreasurer,
